@@ -9,7 +9,8 @@ Les librairies suivantes sont nécessaires :
 - spacy `>= 2.0.12`
 - gensim `>= 3.4.0`
 
-Il est recommandé d'utiliser [anaconda](https://anaconda.com) pour gérer l'environnement de développement. Il est possible de charger cet environnement depuis le fichier `condaenv.yml`.
+Il est recommandé d'utiliser [anaconda](https://anaconda.com) pour gérer l'environnement de développement.
+Il est possible de charger cet environnement depuis le fichier `condaenv.yml` avec la commande `conda env create -f condaenv.yml`.
 
 De plus, il est nécessaire de télécharger les word embeedings français à l'[adresse suivante](http://fauconnier.github.io/#data)
 
