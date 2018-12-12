@@ -87,5 +87,4 @@ dependencies:
   - zlib=1.2.11=h7b6447c_3
   - pip:
     - msgpack==0.5.6
-prefix: /home/wicm2/bress/anaconda2/envs/py36
 
