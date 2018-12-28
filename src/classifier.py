@@ -1,9 +1,5 @@
-
-
-
 class Classifier:
     """The Classifier"""
-
 
     #############################################
     def train(self, trainfile):
@@ -14,8 +10,3 @@ class Classifier:
         """Predicts class labels for the input instances in file 'datafile'
         Returns the list of predicted labels
         """
-
-
-
-
-

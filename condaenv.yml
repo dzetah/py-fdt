@@ -32,18 +32,22 @@ dependencies:
   - keras-applications=1.0.6
   - keras-base=2.2.4
   - keras-preprocessing=1.0.5
+  - libcxx=4.0.1
+  - libcxxabi=4.0.1
   - libedit=3.1.20170329
   - libffi=3.2.1
+  - libgfortran=3.0.1
+  - libopenblas=0.3.3
   - libprotobuf=3.6.1
   - markdown=3.0.1
   - mkl=2018.0.3
-  - mkl_fft=1.0.6
   - mkl_random=1.0.1
   - msgpack-numpy=0.4.3.2
   - msgpack-python=0.5.6
   - murmurhash=1.0.1
   - ncurses=6.1
   - nltk=3.3.0
+  - nomkl=3.0
   - numpy=1.15.4
   - numpy-base=1.15.4
   - openssl=1.1.1a
@@ -87,4 +91,6 @@ dependencies:
   - yaml=0.1.7
   - zlib=1.2.11
   - pip:
+    - fr-core-news-sm==2.0.0
     - msgpack==0.5.6
+
