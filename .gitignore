@@ -1,3 +1,10 @@
+# User files
+*.code-workspace
+.vscode/
+
+# word embeddings binary files
+*.bin 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

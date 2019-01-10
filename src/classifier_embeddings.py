@@ -1,45 +1,53 @@
-
+import sys
+import spacy
 import numpy as np
-np.random.seed(15)
 
-from keras.layers import Input, Dense, Dropout, LSTM
+from gensim.models import KeyedVectors
+
+from keras.layers import Dense, LSTM, Embedding, Dropout, Bidirectional, Input, Flatten
 from keras.models import Model
 from keras import optimizers
 from keras.callbacks import EarlyStopping
+from keras.preprocessing.sequence import pad_sequences
+
+from datatools import load_dataset
 
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from nltk import word_tokenize
 
-import spacy
-
-from datatools import load_dataset
-
+np.random.seed(15)
 nlp = spacy.load('fr')
 
 class Classifier:
     """The Classifier"""
 
     def __init__(self):
+        self.embedding_model_path = "../data/frWac_no_postag_no_phrase_500_cbow_cut100.bin"
+        self.embedding_dims = 500
+        self.embedding_model = None
         self.labelset = None
         self.label_binarizer = LabelBinarizer()
         self.model = None
         self.epochs = 100
-        self.batchsize = 16
-        self.max_features = 10000
-        # create the vectorizer
-        self.vectorizer = TfidfVectorizer(
-            max_features=self.max_features,
-            strip_accents=None,
-            analyzer="word",
-            tokenizer=self.mytokenize,
-            stop_words=None,
-            ngram_range=(1, 2),
-            binary=False,
-            preprocessor=None
+        self.sequence_length = 30
+        self.batchsize = 8
+
+        # load the pre compiled embedding model from the disk
+        self.load_embedding_model()
+
+    def load_embedding_model(self):
+        """Load the binary embedding from the file system"""
+        self.embedding_model = KeyedVectors.load_word2vec_format(
+            self.embedding_model_path,
+            binary=True,
+            encoding='UTF-8',
+            unicode_errors='ignore'
         )
 
-    def mytokenize(self, text):
+        print("Vector size is %d" % len(self.embedding_model.vocab))
+
+    def tokenize(self, text):
         """Customized tokenizer.
         Here you can add other linguistic processing and generate more normalized features
         """
@@ -47,40 +55,47 @@ class Classifier:
         tokens = []
         for sent in doc.sents:
             for token in sent:
-                if token.pos_ not in ["PUNCT", "NUM"] and token.is_stop is not True:
+                if token.pos_ in ["ADJ", "NOUN", "VERB"] and token.is_stop is not True:
                     tokens.append(token.lemma_.strip().lower())
-        # tokens = [t.lemma_.strip().lower() for sent in doc.sents for t in sent if t.pos_ != "PUNCT" and t.is_stop is True]
         # tokens = [t for t in tokens if t not in self.stopset]
         return tokens
 
-    def feature_count(self):
-        return len(self.vectorizer.vocabulary_)
+    def vectorize(self, texts):
+        """get the vectorized representation for the texts"""
+        all_vectors = []
+        for text in texts:
+            text_vectors = []
+            tokens = self.tokenize(text)
+            for t in tokens:
+                try:
+                    text_vectors.append(self.embedding_model.get_vector(t))
+                except KeyError:
+                    # print("Skipping missing word \"%s\" from vocabulary" % word)
+                    pass
+            all_vectors.append(text_vectors)
+        return pad_sequences(all_vectors, maxlen=self.sequence_length)
 
     def create_model(self):
         """Create a neural network model and return it.
         Here you can modify the architecture of the model (network type, number of layers, number of neurones)
         and its parameters"""
 
-        # Define input vector, its size = number of features of the input representation
-        input = Input((self.feature_count(),))
-        # Define output: its size is the number of distinct (class) labels (class probabilities from the softmax)
+        input = Input((self.sequence_length, self.embedding_dims))
         layer = input
-        layer = Dense(50, activation='sigmoid')(layer)
-        # layer = Dropout(.7)(layer)
-        output = Dense(len(self.labelset), activation='softmax')(layer)
-        # create model by defining the input and output layers
+
+        layer = Bidirectional(LSTM(64, return_sequences=True), merge_mode="concat")(layer)
+        layer = Dropout(0.2)(layer)
+        layer = Flatten()(layer)
+        output = Dense(len(self.labelset), activation="softmax")(layer)
+
         model = Model(inputs=input, outputs=output)
-        # compile model (pre
+
+        # compile model
         model.compile(optimizer=optimizers.Adam(),
                       loss='categorical_crossentropy',
                       metrics=['accuracy'])
         model.summary()
         return model
-
-    def vectorize(self, texts):
-        vectors = self.vectorizer.transform(texts).toarray()
-        # print(self.vectorizer.get_feature_names())
-        return vectors
 
     def train_on_data(self, texts, labels, valtexts=None, vallabels=None):
         """Train the model using the list of text examples together with their true (correct) labels"""
@@ -90,21 +105,22 @@ class Classifier:
         self.labelset = set(self.label_binarizer.classes_)
         print("LABELS: %s" % self.labelset)
         # build the feature index (unigram of words, bi-grams etc.)  using the training data
-        self.vectorizer.fit(texts)
+        # self.vectorizer.fit(texts)
         # create a model to train
         self.model = self.create_model()
         # for each text example, build its vector representation
         X_train = self.vectorize(texts)
-        #
         my_callbacks = []
         early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=3, verbose=0, mode='auto', baseline=None)
         my_callbacks.append(early_stopping)
+
         if valtexts is not None and vallabels is not None:
             X_val = self.vectorize(valtexts)
             Y_val = self.label_binarizer.transform(vallabels)
             valdata = (X_val, Y_val)
         else:
             valdata = None
+
         # Train the model!
         self.model.fit(
             X_train, Y_train,
@@ -112,10 +128,8 @@ class Classifier:
             batch_size=self.batchsize,
             callbacks=my_callbacks,
             validation_data=valdata,
-            verbose=2)
-
-    def predict_on_X(self, X):
-        return self.model.predict(X)
+            verbose=2
+        )
 
     def predict_on_data(self, texts):
         """Use this classifier model to predict class labels for a list of input texts.

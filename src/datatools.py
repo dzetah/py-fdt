@@ -3,9 +3,6 @@
 import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
-
-
-
 def load_dataset(filename):
     """ Download the date: list of texts with scores."""
     headers = ['polarity', 'text']
@@ -15,14 +12,11 @@ def load_dataset(filename):
     # return the list of rows : row = label and text
     return sentences
 
-
-
 def save_datarows(datarows, filename):
     with open(filename, 'w', encoding= 'UTF-8', newline='\n') as f:
         for d in datarows:
             print("%s\t%s" % (d.polarity, d.text))
             f.write("%s\t%s\n" % (d.polarity, d.text))
-
 
 def stratified_split(datafile):
     df = load_dataset(datafile)
@@ -34,7 +28,6 @@ def stratified_split(datafile):
         test_data = [df.loc[ind] for ind in test_index]
         save_datarows(train_data, datafile+".train")
         save_datarows(test_data, datafile+".test")
-
 
 if __name__ == "__main__":
     # Just for testing

@@ -3,7 +3,7 @@ import numpy as np
 from scipy import stats
 
 from datatools import load_dataset
-from classifier_bow import Classifier
+from classifier_embeddings import Classifier
 # from eval import eval_file, eval_list, load_label_output
 
 def set_reproducible():
@@ -78,8 +78,4 @@ if __name__ == "__main__":
     print("Test accs:", testaccs)
     print()
     print("Mean Dev Acc.: %.2f (%.2f)\tMean Test Acc.: %.2f (%.2f)" % (np.mean(devaccs), np.std(devaccs), np.mean(testaccs), np.std(testaccs)))
-    print("\nExec time: %.2f s." % (time.perf_counter()-start_time))
-
-
-
-
+    print("\nExec time: %.2f s." % (time.perf_counter() - start_time))

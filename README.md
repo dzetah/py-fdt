@@ -25,6 +25,4 @@ $ python -m spacy download fr
 
 ### Modification de l'environnement
 
-Si vous souhaitez apporter des modifications à l'environnement _Conda_,
-
-n'oubliez pas de mettre à jour le fichier `condaenv.yml` à l'aide du script `conda-export-env.sh`
+Si vous souhaitez apporter des modifications à l'environnement _Conda_, n'oubliez pas de mettre à jour le fichier `condaenv.yml` à l'aide du script `conda-export-env.sh`
