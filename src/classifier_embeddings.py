@@ -1,11 +1,12 @@
 import sys
 import spacy
+import fr_core_news_sm
 import numpy as np
 
-from gensim.models import KeyedVectors
+from gensim.models import KeyedVectors as kv
 
-from keras.layers import Dense, LSTM, Embedding, Dropout, Bidirectional, Input, Flatten
-from keras.models import Model
+from keras.layers import Dense, LSTM, Dropout, Input, Activation, Embedding, Flatten, BatchNormalization
+from keras.models import Sequential
 from keras import optimizers
 from keras.callbacks import EarlyStopping
 from keras.preprocessing.sequence import pad_sequences
@@ -14,87 +15,117 @@ from datatools import load_dataset
 
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from nltk import word_tokenize
+import nltk
 
 np.random.seed(15)
-nlp = spacy.load('fr')
+nlp = fr_core_news_sm.load()
 
 class Classifier:
     """The Classifier"""
 
     def __init__(self):
-        self.embedding_model_path = "../data/frWac_no_postag_no_phrase_500_cbow_cut100.bin"
-        self.embedding_dims = 500
+        self.stopwords_file = '../data/fr_stop_words.txt'
+        self.embedding_file = "../data/frWac_non_lem_no_postag_no_phrase_200_skip_cut100.bin"
+        self.embedding_dims = 200
         self.embedding_model = None
+        self.stopwords = []
         self.labelset = None
         self.label_binarizer = LabelBinarizer()
         self.model = None
         self.epochs = 100
-        self.sequence_length = 30
-        self.batchsize = 8
+        self.sequence_length = 40 # None for auto length
+        self.batchsize = 64
 
         # load the pre compiled embedding model from the disk
         self.load_embedding_model()
 
+        # load the stopwords list
+        self.load_stopwords()
+
     def load_embedding_model(self):
         """Load the binary embedding from the file system"""
-        self.embedding_model = KeyedVectors.load_word2vec_format(
-            self.embedding_model_path,
+        self.embedding_model = kv.load_word2vec_format(
+            self.embedding_file,
             binary=True,
             encoding='UTF-8',
             unicode_errors='ignore'
         )
+        print("Vector Dictionary has %d words" % len(self.embedding_model.vocab))
 
-        print("Vector size is %d" % len(self.embedding_model.vocab))
+    def load_stopwords(self):
+        """load our custom list of stopwords"""
+        with open(self.stopwords_file) as fp:
+            self.stopwords = fp.read().splitlines()
 
     def tokenize(self, text):
         """Customized tokenizer.
         Here you can add other linguistic processing and generate more normalized features
         """
         doc = nlp(text)
-        tokens = []
+        tokens = list()
         for sent in doc.sents:
             for token in sent:
-                if token.pos_ in ["ADJ", "NOUN", "VERB"] and token.is_stop is not True:
-                    tokens.append(token.lemma_.strip().lower())
-        # tokens = [t for t in tokens if t not in self.stopset]
+                if token.pos_ not in ["PUNCT", "SYM", "NUM"] and token.text not in self.stopwords:
+                    tokens.append(token.text.lower().strip())
         return tokens
 
     def vectorize(self, texts):
         """get the vectorized representation for the texts"""
-        all_vectors = []
+        all_indices = list()
+        total_tokens = 0
+        skipped_tokens = 0
+
         for text in texts:
-            text_vectors = []
+            doc_indices = list()
             tokens = self.tokenize(text)
             for t in tokens:
-                try:
-                    text_vectors.append(self.embedding_model.get_vector(t))
-                except KeyError:
+                total_tokens += 1
+                if t in self.embedding_model:
+                    doc_indices.append(self.embedding_model.vocab[t].index)
+                else:
                     # print("Skipping missing word \"%s\" from vocabulary" % word)
-                    pass
-            all_vectors.append(text_vectors)
-        return pad_sequences(all_vectors, maxlen=self.sequence_length)
+                    skipped_tokens += 1
+            all_indices.append(doc_indices)
+
+        print("Vectorizer skipped %d tokens for a total of %d tokens" % (skipped_tokens, total_tokens))
+        return pad_sequences(all_indices, maxlen=self.sequence_length)
 
     def create_model(self):
         """Create a neural network model and return it.
         Here you can modify the architecture of the model (network type, number of layers, number of neurones)
         and its parameters"""
 
-        input = Input((self.sequence_length, self.embedding_dims))
-        layer = input
+        model = Sequential()
 
-        layer = Bidirectional(LSTM(64, return_sequences=True), merge_mode="concat")(layer)
-        layer = Dropout(0.2)(layer)
-        layer = Flatten()(layer)
-        output = Dense(len(self.labelset), activation="softmax")(layer)
+        weights = self.embedding_model.vectors
+        embedding_layer = Embedding(
+            input_dim=weights.shape[0],
+            output_dim=weights.shape[1],
+            weights=[weights],
+            input_length=self.sequence_length,
+            trainable=False
+        )
 
-        model = Model(inputs=input, outputs=output)
+        model.add(embedding_layer)
+
+        model.add(LSTM(256, dropout=0.2, recurrent_dropout=0.2))
+        model.add(Dropout(0.2))
+        model.add(BatchNormalization())
+
+        model.add(Dense(128, activation="relu"))
+        model.add(Dropout(0.2))
+        model.add(BatchNormalization())
+
+        model.add(Dense(len(self.labelset), activation="softmax"))
+
+        model.summary()
 
         # compile model
-        model.compile(optimizer=optimizers.Adam(),
-                      loss='categorical_crossentropy',
-                      metrics=['accuracy'])
-        model.summary()
+        model.compile(
+            optimizer=optimizers.Adam(),
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
         return model
 
     def train_on_data(self, texts, labels, valtexts=None, vallabels=None):
@@ -128,7 +159,7 @@ class Classifier:
             batch_size=self.batchsize,
             callbacks=my_callbacks,
             validation_data=valdata,
-            verbose=2
+            verbose=1
         )
 
     def predict_on_data(self, texts):

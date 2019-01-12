@@ -1,16 +1,18 @@
 import numpy as np
-import pandas as pd
 import regex as re
-import sys
 import fr_core_news_sm
 
-from keras.layers import Input, Dense, Dropout, Activation, LSTM
-from keras.models import load_model, Model
+from gensim.models import KeyedVectors as kv
+
+from keras.layers import Input, Dense, Dropout, Activation, LSTM, Embedding, Flatten
+from keras.models import Model
 from keras import optimizers
 from keras.callbacks import EarlyStopping
+from keras.preprocessing.sequence import pad_sequences
 
 from sklearn.preprocessing import LabelBinarizer
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+from nltk import word_tokenize
 
 import spacy
 
@@ -23,46 +25,32 @@ class Classifier:
     """The Classifier"""
 
     def __init__(self):
-        self.stopwords_file = '../data/fr_stop_words.txt'
-        self.model_file = '../data/model.h5'
-        self.stopwords = None
         self.labelset = None
         self.label_binarizer = LabelBinarizer()
         self.model = None
-        self.epochs = 150
-        self.batchsize = 32
-        self.max_features = 8000
-        # create the vectorizer
+        self.epochs = 100
+        self.batchsize = 8
+        self.max_features = 2500
         self.vectorizer = CountVectorizer(
             max_features=self.max_features,
             strip_accents=None,
             analyzer="word",
             tokenizer=self.tokenize,
             stop_words=None,
-            ngram_range=(1, 2),
+            ngram_range=(1, 1),
             binary=False,
             preprocessor=None
         )
-        self.load_stopwords()
 
-    def load_stopwords(self):
-        """load our custom list of stopwords"""
-        with open(self.stopwords_file) as fp:
-            self.stopwords = fp.read().splitlines()
-
-    def load_model(self):
-        """load the keras model from file if it is present"""
-        return load_model(self.model_file)
-
-    def clean_input(self, input_text):
-        """general text preprocessing before tokenization"""
-        # REMOVE QUOTES
+    def preprocess_input(self, input_text):
+        """general text preprocessing before text tokenization"""
+        # remove quotes
         clean_text = re.sub(r'[\"\']', '', input_text)
 
-        # REMOVE LEADING EDGE SPACING
+        # remove edge spacing
         clean_text = re.sub(r'^ +','', clean_text)
 
-        # LOWERCASE
+        # lowercase the text
         clean_text = clean_text.lower()
 
         return input_text
@@ -71,13 +59,18 @@ class Classifier:
         """Customized tokenizer.
         Here you can add other linguistic processing and generate more normalized features
         """
-        doc = nlp(self.clean_input(input_text))
+        clean_input = self.preprocess_input(input_text)
+        doc = nlp(clean_input)
         tokens = list()
         for sent in doc.sents:
             for token in sent:
-                if token.pos_ not in ["PUNCT", "NUM", "X"] and token.text not in self.stopwords:
-                        tokens.append(token.lemma_)
+                if token.pos_ not in ["PUNCT", "NUM", "SYM"] and token.is_stop is not True and token.is_alpha:
+                    tokens.append(token.text.strip().lower())
         return tokens
+
+    def vectorize(self, texts):
+        vectors = self.vectorizer.transform(texts).toarray()
+        return vectors
 
     def feature_count(self):
         return len(self.vectorizer.vocabulary_)
@@ -87,18 +80,19 @@ class Classifier:
         Here you can modify the architecture of the model (network type, number of layers, number of neurones)
         and its parameters"""
 
-        # Define input vector, its size = number of features of the input representation
         input = Input((self.feature_count(),))
         layer = input
 
-        # layer = Dense(64, activation='sigmoid')(layer)
+        layer = Embedding(self.feature_count(), 20)(layer)
+        layer = LSTM(64)(layer)
+        # layer = Dropout(0.2)(layer)
+        # layer = Flatten()(layer)
+        layer = Activation('softmax')(layer)
+        output = Dense(len(self.labelset))(layer)
 
-        # Define output: its size is the number of distinct (class) labels (class probabilities from the softmax)
-        output = Dense(len(self.labelset), activation="sigmoid")(layer)
-
-        # create model by defining the input and output layers
         model = Model(inputs=input, outputs=output)
-        # compile model (pre
+
+        # compile model
         model.compile(
             optimizer=optimizers.Adam(),
             loss='categorical_crossentropy',
@@ -106,11 +100,6 @@ class Classifier:
         )
         model.summary()
         return model
-
-    def vectorize(self, texts):
-        vectors = self.vectorizer.transform(texts).toarray()
-        # print(self.vectorizer.get_feature_names())
-        return vectors
 
     def train_on_data(self, texts, labels, valtexts=None, vallabels=None):
         """Train the model using the list of text examples together with their true (correct) labels"""
@@ -125,10 +114,11 @@ class Classifier:
         self.model = self.create_model()
         # for each text example, build its vector representation
         X_train = self.vectorize(texts)
-
+        #
         my_callbacks = []
         early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=4, verbose=0, mode='auto', baseline=None)
         my_callbacks.append(early_stopping)
+
         if valtexts is not None and vallabels is not None:
             X_val = self.vectorize(valtexts)
             Y_val = self.label_binarizer.transform(vallabels)

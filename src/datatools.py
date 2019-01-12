@@ -8,7 +8,7 @@ def load_dataset(filename):
     headers = ['polarity', 'text']
     sentences = pd.read_csv(filename, encoding="utf-8", sep='\t', names=headers)
     # print distributions by rating or class
-    print(sentences.groupby('polarity').nunique())
+    # print(sentences.groupby('polarity').nunique())
     # return the list of rows : row = label and text
     return sentences
 

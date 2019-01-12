@@ -119,6 +119,7 @@ ici
 il
 ils
 j
+j'
 je
 juste
 l
@@ -141,7 +142,6 @@ mon
 mot
 même
 n
-ne
 ni
 nom
 nommé
@@ -159,7 +159,6 @@ où
 par
 parce
 parole
-pas
 personne
 personnes
 peu
@@ -210,15 +209,12 @@ t
 ta
 tandis
 te
-tellement
 tels
 tes
 toi
 ton
 tous
 tout
-trop
-très
 tu
 un
 une

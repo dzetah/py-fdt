@@ -7,46 +7,62 @@ from keras.layers import Dense
 from keras.layers import Flatten
 from keras.layers.embeddings import Embedding
 
-# define documents
-docs = ['Well done!',
-		'Good work',
-		'Great effort',
-		'nice work',
-		'Excellent!',
-		'Weak',
-		'Poor effort!',
-		'not good',
-		'poor work',
-		'Could have done better.']
+VOCAB_SIZE = 50
+MAX_SEQ_LENGTH = 4
 
-# define class labels
-labels = array([1,1,1,1,1,0,0,0,0,0])
+def encode_doc(docs):
+    encoded_docs = [one_hot(d, VOCAB_SIZE) for d in docs]
+    return pad_sequences(encoded_docs, maxlen=MAX_SEQ_LENGTH, padding='post')
 
-# integer encode the documents
-vocab_size = 50
-encoded_docs = [one_hot(d, vocab_size) for d in docs]
-print(encoded_docs)
+def create_model():
+    model = Sequential()
+    model.add(Embedding(VOCAB_SIZE, 8, input_length=MAX_SEQ_LENGTH))
+    model.add(Flatten())
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+    return model
 
-# pad documents to a max length of 4 words
-max_length = 4
-padded_docs = pad_sequences(encoded_docs, maxlen=max_length, padding='post')
-print(padded_docs)
+# train data
+train_docs = [
+    'Well done!',
+    'Good work',
+    'Great effort',
+    'nice work',
+    'Excellent!',
+    'Weak',
+    'Poor effort!',
+    'not good',
+    'poor work',
+    'Could have done better.'
+]
+train_labels = array([1,1,1,1,1,0,0,0,0,0])
 
-# define the model
-model = Sequential()
-model.add(Embedding(vocab_size, 8, input_length=max_length))
-model.add(Flatten())
-model.add(Dense(1, activation='sigmoid'))
+# dev data
+dev_docs = [
+    'Excellent work!',
+    'Nice effort',
+    'Incredible',
+    'Bad performance',
+    'Not good',
+    'Could have performed better'
+]
+dev_labels = array([1,1,1,0,0,0])
 
-# compile the model
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+# prepare data
+X_train = encode_doc(train_docs)
+X_dev = encode_doc(dev_docs)
+Y_train = train_labels
+Y_dev = dev_labels
+
+# create the model
+model = create_model()
 
 # summarize the model
 print(model.summary())
 
 # fit the model
-model.fit(padded_docs, labels, epochs=50, verbose=0)
+model.fit(X_train, Y_train, epochs=100, verbose=1)
 
 # evaluate the model
-loss, accuracy = model.evaluate(padded_docs, labels, verbose=0)
-print('Accuracy: %f' % (accuracy*100))
+loss, accuracy = model.evaluate(X_dev, Y_dev, verbose=0)
+print('Accuracy: %.2f' % (accuracy * 100))
