@@ -2,10 +2,12 @@ import sys
 import spacy
 import fr_core_news_sm
 import numpy as np
+import regex as re
 
 from gensim.models import KeyedVectors as kv
 
-from keras.layers import Dense, LSTM, Dropout, Input, Activation, Embedding, Flatten, BatchNormalization
+from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
+from keras.layers import LSTM, GRU, Embedding
 from keras.models import Sequential
 from keras import optimizers
 from keras.callbacks import EarlyStopping
@@ -24,17 +26,17 @@ class Classifier:
     """The Classifier"""
 
     def __init__(self):
-        self.stopwords_file = '../data/fr_stop_words.txt'
-        self.embedding_file = "../data/frWac_non_lem_no_postag_no_phrase_200_skip_cut100.bin"
+        self.stopwords_file = '../resources/fr_stopwords.csv'
+        self.embedding_file = "../resources/frWac_non_lem_no_postag_no_phrase_200_skip_cut100.bin"
         self.embedding_dims = 200
         self.embedding_model = None
         self.stopwords = []
         self.labelset = None
         self.label_binarizer = LabelBinarizer()
         self.model = None
-        self.epochs = 100
-        self.sequence_length = 40 # None for auto length
-        self.batchsize = 64
+        self.epochs = 20
+        self.sequence_length = 25 # None for auto length
+        self.batchsize = 32
 
         # load the pre compiled embedding model from the disk
         self.load_embedding_model()
@@ -57,15 +59,28 @@ class Classifier:
         with open(self.stopwords_file) as fp:
             self.stopwords = fp.read().splitlines()
 
+    def clean_input(self, input_text):
+        """general text preprocessing before tokenization"""
+        # REMOVE QUOTES
+        clean_text = re.sub(r'[\"\']', '', input_text)
+
+        # REMOVE LEADING EDGE SPACING
+        clean_text = re.sub(r'^ +','', clean_text)
+
+        # LOWERCASE
+        clean_text = clean_text.lower()
+
+        return input_text
+
     def tokenize(self, text):
         """Customized tokenizer.
         Here you can add other linguistic processing and generate more normalized features
         """
-        doc = nlp(text)
+        doc = nlp(self.clean_input(text))
         tokens = list()
         for sent in doc.sents:
             for token in sent:
-                if token.pos_ not in ["PUNCT", "SYM", "NUM"] and token.text not in self.stopwords:
+                if token.pos_ not in ["PUNCT", "SYM", "NUM", "X"] and token.text not in self.stopwords:
                     tokens.append(token.text.lower().strip())
         return tokens
 
@@ -88,7 +103,7 @@ class Classifier:
             all_indices.append(doc_indices)
 
         print("Vectorizer skipped %d tokens for a total of %d tokens" % (skipped_tokens, total_tokens))
-        return pad_sequences(all_indices, maxlen=self.sequence_length)
+        return pad_sequences(all_indices, maxlen=self.sequence_length, value=0)
 
     def create_model(self):
         """Create a neural network model and return it.
@@ -102,19 +117,15 @@ class Classifier:
             input_dim=weights.shape[0],
             output_dim=weights.shape[1],
             weights=[weights],
-            input_length=self.sequence_length,
+            mask_zero= True,
             trainable=False
         )
 
         model.add(embedding_layer)
 
-        model.add(LSTM(256, dropout=0.2, recurrent_dropout=0.2))
-        model.add(Dropout(0.2))
-        model.add(BatchNormalization())
-
-        model.add(Dense(128, activation="relu"))
-        model.add(Dropout(0.2))
-        model.add(BatchNormalization())
+        model.add(LSTM(280, dropout=0.3, recurrent_dropout=0.2, activation='relu'))
+        model.add(Dense(32, activation='relu'))
+        model.add(Dense(64, activation='relu'))
 
         model.add(Dense(len(self.labelset), activation="softmax"))
 
