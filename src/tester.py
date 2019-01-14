@@ -3,7 +3,7 @@ import numpy as np
 from scipy import stats
 
 from datatools import load_dataset
-from classifier_embeddings import Classifier
+from classifier_mixed import Classifier
 # from eval import eval_file, eval_list, load_label_output
 
 def set_reproducible():
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     testfile = None
     # Basic checking
     start_time = time.perf_counter()
-    n = 1
+    n = 5
     devaccs = []
     testaccs = []
     for i in range(n):
