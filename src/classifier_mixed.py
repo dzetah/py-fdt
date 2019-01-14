@@ -2,12 +2,11 @@ import sys
 import spacy
 import fr_core_news_sm
 import numpy as np
-import regex as re
 
 from gensim.models import KeyedVectors as kv
 
 from keras.layers import Input, Dense, Dropout, Activation, Concatenate
-from keras.layers import LSTM, GRU, Embedding, Flatten
+from keras.layers import LSTM, GRU, Embedding, Bidirectional
 from keras.models import Model
 from keras import optimizers
 from keras.callbacks import EarlyStopping
@@ -27,17 +26,17 @@ class Classifier:
 
     def __init__(self):
         self.stopwords_file = '../resources/fr_stopwords.csv'
-        self.embedding_file = '../resources/frWac_non_lem_no_postag_no_phrase_200_skip_cut100.bin'
-        self.max_features = 10000
+        self.embedding_file = '../resources/frWac_non_lem_no_postag_no_phrase_200_cbow_cut100.bin'
         self.embedding_dims = 200
         self.embedding_model = None
         self.stopwords = []
         self.labelset = None
         self.label_binarizer = LabelBinarizer()
         self.model = None
-        self.epochs = 20
-        self.sequence_length = 25 # None for auto length
+        self.epochs = 25
+        self.sequence_length = 35 # None for auto length
         self.batchsize = 32
+        self.max_features = 9000
 
         self.vectorizer = CountVectorizer(
             max_features=self.max_features,
@@ -82,9 +81,7 @@ class Classifier:
         tokens = list()
         for sent in doc.sents:
             for token in sent:
-                if token.pos_ == 'NUM':
-                    tokens.append('#NUM')
-                elif token.pos_ not in ["PUNCT", "SYM", "X"] and token.text not in self.stopwords:
+                if token.pos_ not in ["PUNCT", "SYM", "X", "NUM"] and token.text not in self.stopwords:
                     tokens.append(token.text.lower().strip())
         return tokens
 
@@ -115,7 +112,7 @@ class Classifier:
         for sent in doc.sents:
             for token in sent:
                 if token.pos_ == 'NUM':
-                    tokens.append('#NUM')
+                    tokens.append('#NUM#')
                 elif token.pos_ not in ["PUNCT", "SYM", "X"] and token.text not in self.stopwords:
                     tokens.append(token.lemma_.lower().strip())
         return tokens
@@ -146,19 +143,19 @@ class Classifier:
             trainable=False
         )(branch1)
 
-        branch1 = LSTM(180, dropout=0.5, recurrent_dropout=0.3, activation='relu')(branch1)
-        branch1 = Dense(32, activation='sigmoid')(branch1)
+        # branch1 = GRU(280, dropout=0.5, recurrent_dropout=0.3, activation='relu', return_sequences=True)(branch1)
+        branch1 = GRU(240, dropout=0.4, recurrent_dropout=0.3, activation='relu')(branch1)
+        branch1 = Dense(16, activation='relu')(branch1)
 
         # Second input (bag of words)
         input2 = Input((self.features_count(),))
         branch2 = input2
-        branch2 = Dense(64, activation='relu')(branch2)
+        branch2 = Dense(16, activation='relu')(branch2)
 
         # our model concatenates the two inputs
         input = Concatenate(axis=-1)([branch1, branch2])
         layer = input
-        layer = Dense(64, activation='relu')(layer)
-        #  model.add(Dense(64, activation='relu'))
+        layer = Dense(16, activation='relu')(layer)
 
         output = Dense(len(self.labelset), activation='softmax')(layer)
 
